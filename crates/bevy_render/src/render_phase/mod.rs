@@ -61,6 +61,12 @@ use std::{
     ops::Range,
     slice::SliceIndex,
 };
+#[cfg(feature = "trace")]
+use bevy_utils::tracing::info_span;
+use crate::{diagnostic::RecordDiagnostics, render_resource::RenderPassDescriptor};
+use crate::camera::ExtractedCamera;
+use crate::renderer::RenderContext;
+use crate::view::ViewTarget;
 
 /// Stores the rendering instructions for a single phase that uses bins in all
 /// views.
@@ -761,6 +767,62 @@ where
     #[inline]
     pub fn iter_entities(&'_ self) -> impl Iterator<Item = Entity> + '_ {
         self.items.iter().map(|item| item.entity())
+    }
+
+    pub fn render_with_grab<'w>(
+        &self,
+        render_context: &mut RenderContext<'w>,
+        world: &'w World,
+        view_entity: Entity,
+        camera: &'w ExtractedCamera,
+        target: &'w ViewTarget,
+    ) {
+
+        if !self.items.is_empty() {
+            let draw_functions = world.resource::<DrawFunctions<I>>();
+            let mut draw_functions = draw_functions.write();
+            draw_functions.prepare(world);
+
+            let mut index = 0;
+            while index < self.items.len() {
+                let item = &self.items[index];
+                let batch_range = item.batch_range();
+                if batch_range.is_empty() {
+                    index += 1;
+                } else {
+                    let draw_function = draw_functions.get_mut(item.draw_function()).unwrap();
+
+                    draw_function.before_draw(world, render_context, view_entity, item, target);
+
+                    {
+                        #[cfg(feature = "trace")]
+                        let _main_pass_2d = info_span!("main_transparent_pass_2d").entered();
+
+                        let diagnostics = render_context.diagnostic_recorder();
+
+                        let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
+                            label: Some("main_transparent_pass_2d"),
+                            color_attachments: &[Some(target.get_color_attachment())],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                        });
+
+                        let pass_span = diagnostics.pass_span(&mut render_pass, "main_transparent_pass_2d");
+
+                        if let Some(viewport) = camera.viewport.as_ref() {
+                            render_pass.set_camera_viewport(viewport);
+                        }
+
+                        draw_function.draw(world, &mut render_pass, view_entity, item);
+
+                        pass_span.end(&mut render_pass);
+                    }
+                    
+                    index += batch_range.len();
+                }
+            }
+        }
     }
 
     /// Renders all of its [`PhaseItem`]s using their corresponding draw functions.

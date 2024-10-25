@@ -13,6 +13,8 @@ use std::{
     hash::Hash,
     sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
+use crate::renderer::RenderContext;
+use crate::view::ViewTarget;
 
 /// A draw function used to draw [`PhaseItem`]s.
 ///
@@ -26,6 +28,16 @@ pub trait Draw<P: PhaseItem>: Send + Sync + 'static {
     /// Implementing this is optional.
     #[allow(unused_variables)]
     fn prepare(&mut self, world: &'_ World) {}
+
+    fn before_draw<'w>(
+        &mut self,
+        _world: &'w World,
+        _render_context: &mut RenderContext<'w>,
+        _view: Entity,
+        _item: &P,
+        _target: &'w ViewTarget,
+    ) {
+    }
 
     /// Draws a [`PhaseItem`] by issuing zero or more `draw` calls via the [`TrackedRenderPass`].
     fn draw<'w>(
@@ -197,6 +209,17 @@ pub trait RenderCommand<P: PhaseItem> {
     /// the supplied query data will be `None`.
     type ItemQuery: ReadOnlyQueryData;
 
+    fn before_render<'w>(
+        _item: &P,
+        _view: ROQueryItem<'w, Self::ViewQuery>,
+        _entity: Option<ROQueryItem<'w, Self::ItemQuery>>,
+        _param: SystemParamItem<'w, '_, Self::Param>,
+        _render_context: &mut RenderContext<'w>,
+        _target: &'w ViewTarget,
+    ) -> RenderCommandResult {
+        RenderCommandResult::Success
+    }
+
     /// Renders a [`PhaseItem`] by recording commands (e.g. setting pipelines, binding bind groups,
     /// issuing draw calls, etc.) via the [`TrackedRenderPass`].
     fn render<'w>(
@@ -221,6 +244,30 @@ macro_rules! render_command_tuple_impl {
             type Param = ($($name::Param,)*);
             type ViewQuery = ($($name::ViewQuery,)*);
             type ItemQuery = ($($name::ItemQuery,)*);
+            
+            #[allow(non_snake_case)]
+            fn before_render<'w>(
+                _item: &P,
+                ($($view,)*): ROQueryItem<'w, Self::ViewQuery>,
+                maybe_entities: Option<ROQueryItem<'w, Self::ItemQuery>>,
+                ($($name,)*): SystemParamItem<'w, '_, Self::Param>,
+                _render_context: &mut RenderContext<'w>,
+                _target: &'w ViewTarget,
+            ) -> RenderCommandResult {
+                match maybe_entities {
+                    None => {
+                        $(if let RenderCommandResult::Failure = $name::before_render(_item, $view, None, $name, _render_context, _target) {
+                            return RenderCommandResult::Failure;
+                        })*
+                    }
+                    Some(($($entity,)*)) => {
+                        $(if let RenderCommandResult::Failure = $name::before_render(_item, $view, Some($entity), $name, _render_context, _target) {
+                            return RenderCommandResult::Failure;
+                        })*
+                    }
+                }
+                RenderCommandResult::Success
+            }
 
             #[allow(non_snake_case)]
             fn render<'w>(
@@ -281,6 +328,20 @@ where
         self.state.update_archetypes(world);
         self.view.update_archetypes(world);
         self.entity.update_archetypes(world);
+    }
+
+    fn before_draw<'w>(
+        &mut self,
+        world: &'w World,
+        render_context: &mut RenderContext<'w>,
+        view: Entity,
+        item: &P,
+        target: &'w ViewTarget,
+    ) {
+        let param = self.state.get_manual(world);
+        let view = self.view.get_manual(world, view).unwrap();
+        let entity = self.entity.get_manual(world, item.entity()).ok();
+        C::before_render(item, view, entity, param, render_context, target);
     }
 
     /// Fetches the ECS parameters for the wrapped [`RenderCommand`] and then renders it.

@@ -53,16 +53,10 @@ impl ViewNode for MainTransparentPass2dNode {
 
             let pass_span = diagnostics.pass_span(&mut render_pass, "main_transparent_pass_2d");
 
-            if let Some(viewport) = camera.viewport.as_ref() {
-                render_pass.set_camera_viewport(viewport);
-            }
-
-            if !transparent_phase.items.is_empty() {
-                transparent_phase.render(&mut render_pass, world, view_entity);
-            }
-
             pass_span.end(&mut render_pass);
         }
+
+        transparent_phase.render_with_grab(render_context, world, view_entity, camera, target);
 
         // WebGL2 quirk: if ending with a render pass with a custom viewport, the viewport isn't
         // reset for the next render pass so add an empty render pass without a custom viewport
