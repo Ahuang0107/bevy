@@ -102,6 +102,21 @@ pub struct Transparent2d {
     pub draw_function: DrawFunctionId,
     pub batch_range: Range<u32>,
     pub extra_index: PhaseItemExtraIndex,
+    pub use_grab: bool,
+}
+
+impl Default for Transparent2d {
+    fn default() -> Self {
+        Self {
+            sort_key: FloatOrd(f32::INFINITY),
+            entity: Entity::PLACEHOLDER,
+            pipeline: CachedRenderPipelineId::INVALID,
+            draw_function: DrawFunctionId::INVALID,
+            batch_range: Range::default(),
+            extra_index: PhaseItemExtraIndex(u32::MAX),
+            use_grab: false,
+        }
+    }
 }
 
 impl PhaseItem for Transparent2d {
@@ -133,6 +148,11 @@ impl PhaseItem for Transparent2d {
     #[inline]
     fn batch_range_and_extra_index_mut(&mut self) -> (&mut Range<u32>, &mut PhaseItemExtraIndex) {
         (&mut self.batch_range, &mut self.extra_index)
+    }
+
+    #[inline]
+    fn use_grab(&self) -> bool {
+        self.use_grab
     }
 }
 

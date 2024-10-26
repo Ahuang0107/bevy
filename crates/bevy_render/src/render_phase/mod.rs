@@ -37,6 +37,10 @@ use encase::{internal::WriteInto, ShaderSize};
 use nonmax::NonMaxU32;
 pub use rangefinder::*;
 
+use crate::camera::ExtractedCamera;
+use crate::render_resource::RenderPassDescriptor;
+use crate::renderer::RenderContext;
+use crate::view::ViewTarget;
 use crate::{
     batching::{
         self,
@@ -61,12 +65,6 @@ use std::{
     ops::Range,
     slice::SliceIndex,
 };
-#[cfg(feature = "trace")]
-use bevy_utils::tracing::info_span;
-use crate::{diagnostic::RecordDiagnostics, render_resource::RenderPassDescriptor};
-use crate::camera::ExtractedCamera;
-use crate::renderer::RenderContext;
-use crate::view::ViewTarget;
 
 /// Stores the rendering instructions for a single phase that uses bins in all
 /// views.
@@ -777,11 +775,25 @@ where
         camera: &'w ExtractedCamera,
         target: &'w ViewTarget,
     ) {
-
         if !self.items.is_empty() {
             let draw_functions = world.resource::<DrawFunctions<I>>();
             let mut draw_functions = draw_functions.write();
             draw_functions.prepare(world);
+
+            let mut render_pass_wrapper = {
+                let mut render_pass =
+                    render_context.begin_tracked_render_pass(RenderPassDescriptor {
+                        label: Some("main_transparent_pass_2d"),
+                        color_attachments: &[Some(target.get_color_attachment())],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                if let Some(viewport) = camera.viewport.as_ref() {
+                    render_pass.set_camera_viewport(viewport);
+                }
+                Some(render_pass)
+            };
 
             let mut index = 0;
             while index < self.items.len() {
@@ -792,33 +804,29 @@ where
                 } else {
                     let draw_function = draw_functions.get_mut(item.draw_function()).unwrap();
 
-                    draw_function.before_draw(world, render_context, view_entity, item, target);
-
-                    {
-                        #[cfg(feature = "trace")]
-                        let _main_pass_2d = info_span!("main_transparent_pass_2d").entered();
-
-                        let diagnostics = render_context.diagnostic_recorder();
-
-                        let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
-                            label: Some("main_transparent_pass_2d"),
-                            color_attachments: &[Some(target.get_color_attachment())],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                        });
-
-                        let pass_span = diagnostics.pass_span(&mut render_pass, "main_transparent_pass_2d");
-
-                        if let Some(viewport) = camera.viewport.as_ref() {
-                            render_pass.set_camera_viewport(viewport);
-                        }
-
-                        draw_function.draw(world, &mut render_pass, view_entity, item);
-
-                        pass_span.end(&mut render_pass);
+                    if item.use_grab() {
+                        drop(render_pass_wrapper);
+                        draw_function.before_draw(world, render_context, view_entity, item, target);
+                        render_pass_wrapper = {
+                            let mut render_pass =
+                                render_context.begin_tracked_render_pass(RenderPassDescriptor {
+                                    label: Some("main_transparent_pass_2d"),
+                                    color_attachments: &[Some(target.get_color_attachment())],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                });
+                            if let Some(viewport) = camera.viewport.as_ref() {
+                                render_pass.set_camera_viewport(viewport);
+                            }
+                            Some(render_pass)
+                        };
                     }
-                    
+
+                    if let Some(render_pass) = &mut render_pass_wrapper {
+                        draw_function.draw(world, render_pass, view_entity, item);
+                    }
+
                     index += batch_range.len();
                 }
             }
@@ -918,6 +926,12 @@ pub trait PhaseItem: Sized + Send + Sync + 'static {
     /// Returns a pair of mutable references to both the batch range and extra
     /// index.
     fn batch_range_and_extra_index_mut(&mut self) -> (&mut Range<u32>, &mut PhaseItemExtraIndex);
+
+    /// Return if this item use grab texture, if used grab texture, render phase will finish current
+    /// render pass, copy screen texture to grab texture, then create a new render pass
+    fn use_grab(&self) -> bool {
+        false
+    }
 }
 
 /// The "extra index" associated with some [`PhaseItem`]s, alongside the
