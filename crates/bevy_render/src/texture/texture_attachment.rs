@@ -81,6 +81,42 @@ impl ColorAttachment {
     }
 }
 
+/// A wrapper for a [`TextureView`] that is used as a stencil-only [`RenderPassDepthStencilAttachment`].
+pub struct StencilAttachment {
+    pub view: TextureView,
+    clear_value: Option<u32>,
+    is_first_call: Arc<AtomicBool>,
+}
+
+impl StencilAttachment {
+    pub fn new(view: TextureView, clear_value: Option<u32>) -> Self {
+        Self {
+            view,
+            clear_value,
+            is_first_call: Arc::new(AtomicBool::new(clear_value.is_some())),
+        }
+    }
+    pub fn get_attachment(&self) -> RenderPassDepthStencilAttachment {
+        let first_call = self
+            .is_first_call
+            .fetch_and(false, Ordering::SeqCst);
+
+        RenderPassDepthStencilAttachment {
+            view: &self.view,
+            depth_ops: None,
+            stencil_ops: Some(Operations {
+                load: if first_call {
+                    // If first_call is true, then a clear value will always have been provided in the constructor
+                    LoadOp::Clear(self.clear_value.unwrap())
+                } else {
+                    LoadOp::Load
+                },
+                store: StoreOp::Store,
+            }),
+        }
+    }
+}
+
 /// A wrapper for a [`TextureView`] that is used as a depth-only [`RenderPassDepthStencilAttachment`].
 pub struct DepthAttachment {
     pub view: TextureView,

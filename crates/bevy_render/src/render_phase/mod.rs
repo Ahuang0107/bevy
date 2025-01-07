@@ -785,10 +785,11 @@ where
                     render_context.begin_tracked_render_pass(RenderPassDescriptor {
                         label: Some("main_transparent_pass_2d"),
                         color_attachments: &[Some(target.get_color_attachment())],
-                        depth_stencil_attachment: None,
+                        depth_stencil_attachment: Some(target.get_stencil_attachment()),
                         timestamp_writes: None,
                         occlusion_query_set: None,
                     });
+                render_pass.set_stencil_reference(0);
                 if let Some(viewport) = camera.viewport.as_ref() {
                     render_pass.set_camera_viewport(viewport);
                 }
@@ -812,10 +813,11 @@ where
                                 render_context.begin_tracked_render_pass(RenderPassDescriptor {
                                     label: Some("main_transparent_pass_2d"),
                                     color_attachments: &[Some(target.get_color_attachment())],
-                                    depth_stencil_attachment: None,
+                                    depth_stencil_attachment: Some(target.get_stencil_attachment()),
                                     timestamp_writes: None,
                                     occlusion_query_set: None,
                                 });
+                            render_pass.set_stencil_reference(0);
                             if let Some(viewport) = camera.viewport.as_ref() {
                                 render_pass.set_camera_viewport(viewport);
                             }

@@ -41,6 +41,7 @@ use wgpu::{
     BufferUsages, Extent3d, RenderPassColorAttachment, RenderPassDepthStencilAttachment, StoreOp,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
+use crate::texture::StencilAttachment;
 
 pub const VIEW_TYPE_HANDLE: Handle<Shader> = Handle::weak_from_u128(15421373904451797197);
 
@@ -453,6 +454,7 @@ pub struct ViewTarget {
     /// 0 represents `main_textures.a`, 1 represents `main_textures.b`
     /// This is shared across view targets with the same render target
     main_texture: Arc<AtomicUsize>,
+    stencil_texture: ViewStencilTexture,
     out_texture: OutputColorAttachment,
 }
 
@@ -556,6 +558,10 @@ impl ViewTarget {
         } else {
             self.main_textures.b.get_attachment()
         }
+    }
+    
+    pub fn get_stencil_attachment(&self)->RenderPassDepthStencilAttachment{
+        self.stencil_texture.get_attachment()
     }
 
     /// Retrieve this target's "unsampled" main texture's color attachment.
@@ -684,6 +690,29 @@ impl ViewTarget {
                 destination: &self.main_textures.a.texture.default_view,
             }
         }
+    }
+}
+
+#[derive(Component)]
+pub struct ViewStencilTexture {
+    pub texture: Texture,
+    attachment: StencilAttachment,
+}
+
+impl ViewStencilTexture {
+    pub fn new(texture: CachedTexture, clear_value: Option<u32>) -> Self {
+        Self {
+            texture: texture.texture,
+            attachment: StencilAttachment::new(texture.default_view, clear_value),
+        }
+    }
+
+    pub fn get_attachment(&self) -> RenderPassDepthStencilAttachment {
+        self.attachment.get_attachment()
+    }
+
+    pub fn view(&self) -> &TextureView {
+        &self.attachment.view
     }
 }
 
@@ -907,10 +936,25 @@ pub fn prepare_view_targets(
             main_texture: main_texture.clone(),
         };
 
+        let stencil_texture = ViewStencilTexture::new(texture_cache.get(
+            &render_device,
+            TextureDescriptor {
+                label: Some("view_stencil_texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: msaa.samples(),
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Stencil8,
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            },
+        ), Some(0));
+
         commands.entity(entity).insert(ViewTarget {
             main_texture: main_textures.main_texture.clone(),
             main_textures,
             main_texture_format,
+            stencil_texture,
             out_texture: out_texture.clone(),
         });
     }

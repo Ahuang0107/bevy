@@ -46,7 +46,8 @@ impl ViewNode for MainTransparentPass2dNode {
             let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
                 label: Some("main_transparent_pass_2d"),
                 color_attachments: &[Some(target.get_color_attachment())],
-                depth_stencil_attachment: None,
+                // TODO 这里其实还有问题，需要提供一个开关或者判断条件，因为并不是所有的 transparent 2d 的 pipeline 都使用 stencil 的，如果 pipeline 没有定义 stencil 这里会报错的
+                depth_stencil_attachment: Some(target.get_stencil_attachment()),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });

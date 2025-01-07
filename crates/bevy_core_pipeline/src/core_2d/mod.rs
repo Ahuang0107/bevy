@@ -103,6 +103,8 @@ pub struct Transparent2d {
     pub batch_range: Range<u32>,
     pub extra_index: PhaseItemExtraIndex,
     pub use_grab: bool,
+    pub mask_start: bool,
+    pub mask_end: bool,
 }
 
 impl Default for Transparent2d {
@@ -115,6 +117,8 @@ impl Default for Transparent2d {
             batch_range: Range::default(),
             extra_index: PhaseItemExtraIndex(u32::MAX),
             use_grab: false,
+            mask_start: false,
+            mask_end: false,
         }
     }
 }
