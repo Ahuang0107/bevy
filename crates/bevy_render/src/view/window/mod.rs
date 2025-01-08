@@ -29,6 +29,7 @@ pub mod screenshot;
 use screenshot::{
     ScreenshotManager, ScreenshotPlugin, ScreenshotPreparedState, ScreenshotToScreenPipeline,
 };
+use crate::texture::BevyDefault;
 
 use super::Msaa;
 
@@ -84,7 +85,7 @@ pub struct ExtractedWindow {
 impl ExtractedWindow {
     fn set_swapchain_texture(&mut self, frame: wgpu::SurfaceTexture) {
         let texture_view_descriptor = TextureViewDescriptor {
-            format: Some(frame.texture.format().add_srgb_suffix()),
+            format: Some(frame.texture.format()),
             ..default()
         };
         self.swap_chain_texture_view = Some(TextureView::from(
@@ -379,7 +380,7 @@ pub fn prepare_windows(
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: surface_data.configuration.format.add_srgb_suffix(),
+                format: surface_data.configuration.format,
                 usage: TextureUsages::RENDER_ATTACHMENT
                     | TextureUsages::COPY_SRC
                     | TextureUsages::TEXTURE_BINDING,
@@ -476,8 +477,7 @@ pub fn create_surfaces(
                 let mut format = *formats.first().expect("No supported formats for surface");
                 for available_format in formats {
                     // Rgba8UnormSrgb and Bgra8UnormSrgb and the only sRGB formats wgpu exposes that we can use for surfaces.
-                    if available_format == TextureFormat::Rgba8UnormSrgb
-                        || available_format == TextureFormat::Bgra8UnormSrgb
+                    if available_format == TextureFormat::bevy_default()
                     {
                         format = available_format;
                         break;
@@ -512,11 +512,7 @@ pub fn create_surfaces(
                         }
                         CompositeAlphaMode::Inherit => wgpu::CompositeAlphaMode::Inherit,
                     },
-                    view_formats: if !format.is_srgb() {
-                        vec![format.add_srgb_suffix()]
-                    } else {
-                        vec![]
-                    },
+                    view_formats: vec![],
                 };
 
                 render_device.configure_surface(&surface, &configuration);

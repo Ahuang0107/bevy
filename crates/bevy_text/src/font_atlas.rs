@@ -6,6 +6,7 @@ use bevy_render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::Image,
 };
+use bevy_render::texture::BevyDefault;
 use bevy_sprite::{DynamicTextureAtlasBuilder, TextureAtlasLayout};
 use bevy_utils::HashMap;
 
@@ -61,7 +62,7 @@ impl FontAtlas {
             },
             TextureDimension::D2,
             &[0, 0, 0, 0],
-            TextureFormat::Rgba8UnormSrgb,
+            TextureFormat::bevy_default(),
             // Need to keep this image CPU persistent in order to add additional glyphs later on
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         ));
